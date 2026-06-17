@@ -6,7 +6,9 @@ import { CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/elements";
 import { Button } from "@/components/ui/button";
 
-export default function PaymentVerificationPage() {
+import { Suspense } from "react";
+
+function VerificationContent() {
   const searchParams = useSearchParams();
   const orderId = searchParams.get("orderId");
   const router = useRouter();
@@ -107,5 +109,17 @@ export default function PaymentVerificationPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+export default function PaymentVerificationPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center p-4">
+        <Loader2 className="h-12 w-12 text-primary animate-spin" />
+      </div>
+    }>
+      <VerificationContent />
+    </Suspense>
   );
 }
