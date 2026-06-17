@@ -1,9 +1,0 @@
-{
-  "/api/payment/verify/route": "app/api/payment/verify/route.js",
-  "/pricing/page": "app/pricing/page.js",
-  "/page": "app/page.js",
-  "/contact/page": "app/contact/page.js",
-  "/dashboard/page": "app/dashboard/page.js",
-  "/dashboard/subscription/page": "app/dashboard/subscription/page.js",
-  "/dashboard/departments/page": "app/dashboard/departments/page.js"
-}

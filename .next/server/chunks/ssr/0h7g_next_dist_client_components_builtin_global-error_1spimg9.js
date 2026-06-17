@@ -1,0 +1,3 @@
+module.exports=[61087,(a,b,c)=>{let{createClientModuleProxy:d}=a.r(10690);a.n(d("[project]/Desktop/iquick-msbte/node_modules/next/dist/client/components/builtin/global-error.js <module evaluation>"))},29453,(a,b,c)=>{let{createClientModuleProxy:d}=a.r(10690);a.n(d("[project]/Desktop/iquick-msbte/node_modules/next/dist/client/components/builtin/global-error.js"))},80816,a=>{"use strict";a.i(61087);var b=a.i(29453);a.n(b)},6131,a=>{a.n(a.i(80816))}];
+
+//# sourceMappingURL=0h7g_next_dist_client_components_builtin_global-error_1spimg9.js.map
