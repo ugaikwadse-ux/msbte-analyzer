@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Mail, Lock, Eye, EyeOff } from "lucide-react";
@@ -15,8 +15,13 @@ export default function LoginPage() {
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const { signIn } = useAuth();
+  const { signIn, user } = useAuth();
   const router = useRouter();
+  useEffect(() => {
+    if (user) {
+      router.push("/dashboard");
+    }
+  }, [user, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,16 +29,15 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await signIn(email, password);
-      router.push("/dashboard");
+      // Let the useEffect handle the redirect when the user state is updated globally
     } catch (err: unknown) {
+      setLoading(false);
       const msg = err instanceof Error ? err.message : "Login failed";
       if (msg.includes("user-not-found") || msg.includes("wrong-password") || msg.includes("invalid-credential")) {
         setError("Invalid email or password.");
       } else {
         setError(msg);
       }
-    } finally {
-      setLoading(false);
     }
   };
 

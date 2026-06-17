@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Mail, Lock, User, Eye, EyeOff } from "lucide-react";
@@ -16,8 +16,14 @@ export default function SignupPage() {
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const { signUp } = useAuth();
+  const { signUp, user } = useAuth();
   const router = useRouter();
+
+  useEffect(() => {
+    if (user) {
+      router.push("/dashboard");
+    }
+  }, [user, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,16 +35,15 @@ export default function SignupPage() {
     setLoading(true);
     try {
       await signUp(email, password, name);
-      router.push("/dashboard");
+      // Let useEffect handle redirect when user state updates
     } catch (err: unknown) {
+      setLoading(false);
       const msg = err instanceof Error ? err.message : "Signup failed";
       if (msg.includes("email-already-in-use")) {
         setError("An account with this email already exists.");
       } else {
         setError(msg);
       }
-    } finally {
-      setLoading(false);
     }
   };
 

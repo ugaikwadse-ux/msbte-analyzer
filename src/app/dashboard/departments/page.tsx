@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Plus, Building2, Trash2, BookOpen, ChevronRight } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-import { getDepartments, createDepartment, deleteDepartment } from "@/lib/db";
+import { getDepartments, createDepartment, deleteDepartment, getUserProfile } from "@/lib/db";
 import type { Department } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Card, CardContent, CardHeader, CardTitle, Skeleton, Alert } from "@/components/ui/elements";
@@ -45,7 +45,10 @@ export default function DepartmentsPage() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !name.trim()) return;
-    const isPremium = subscriptionPlan === "premium" || subscriptionPlan === "institute";
+    // Fresh check to prevent bypass on long-running sessions
+    const profile = await getUserProfile(user.uid);
+    const plan = profile?.subscription || "free";
+    const isPremium = plan === "premium" || plan === "institute" || user.email === "master@msbteresult.online";
     if (!isPremium && departments.length >= 1) {
       toast({
         title: "Upgrade Required",

@@ -46,6 +46,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
+        // Master account – lifetime free institute access
+        const MASTER_EMAIL = "master@msbteresult.online";
+        if (firebaseUser.email === MASTER_EMAIL) {
+          setSubscriptionPlan("institute");
+          setUser({ ...firebaseUser, subscriptionPlan: "institute" });
+          setLoading(false);
+          return;
+        }
+
         try {
           const profile = await getUserProfile(firebaseUser.uid);
           const plan = (profile?.subscription as SubscriptionPlan) || "free";

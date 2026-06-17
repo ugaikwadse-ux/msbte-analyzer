@@ -6,8 +6,15 @@ export async function POST(req: Request) {
   try {
     const { planId, amount, email, phone, userId } = await req.json();
 
-    if (!planId || !email || !amount || !userId || !phone) {
-      return NextResponse.json({ error: 'Missing required parameters (planId, amount, email, phone, userId)' }, { status: 400 });
+    if (!planId || !email || !userId || !phone) {
+      return NextResponse.json({ error: 'Missing required parameters (planId, email, phone, userId)' }, { status: 400 });
+    }
+
+    // Server-side price enforcement — never trust client amount
+    const PLAN_PRICES: Record<string, number> = { institute: 1599 };
+    const verifiedAmount = PLAN_PRICES[planId];
+    if (!verifiedAmount) {
+      return NextResponse.json({ error: 'Invalid plan' }, { status: 400 });
     }
 
     const orderId = crypto.randomUUID();
@@ -19,7 +26,7 @@ export async function POST(req: Request) {
       email,
       phone,
       plan: planId,
-      amount,
+      amount: verifiedAmount,
       status: 'INITIATED',
       createdAt: serverTimestamp(),
       history: ['created', 'payment_started']

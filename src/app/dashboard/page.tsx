@@ -161,8 +161,8 @@ export default function DashboardPage() {
                       <BarChart3 className="h-5 w-5 text-primary" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium text-foreground truncate">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-medium text-foreground truncate max-w-full">
                           {analysis.departmentName}
                         </p>
                         <Badge variant="outline" className="text-xs flex-shrink-0">
@@ -175,7 +175,7 @@ export default function DashboardPage() {
                           {analysis.status}
                         </Badge>
                       </div>
-                      <div className="flex items-center gap-3 mt-0.5">
+                      <div className="flex flex-wrap items-center gap-3 mt-1">
                         <span className="text-xs text-muted-foreground flex items-center gap-1">
                           <Users className="h-3 w-3" />
                           {analysis.totalStudents} students

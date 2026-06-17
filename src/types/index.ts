@@ -51,6 +51,7 @@ export interface Analysis {
   processedStudents: number;
   passCount: number;
   failCount: number;
+  atktCount: number;
   passPercentage: number;
   distinctionCount: number;
   firstClassCount: number;
@@ -143,6 +144,7 @@ export interface AnalysisStats {
   totalStudents: number;
   passCount: number;
   failCount: number;
+  atktCount: number;
   passPercentage: number;
   distinctionCount: number;
   firstClassCount: number;

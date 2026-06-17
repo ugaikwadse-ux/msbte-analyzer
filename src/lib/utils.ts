@@ -32,10 +32,19 @@ export function isPassed(status: string | undefined): boolean {
   return s.includes("pass") || s.includes("first class") || s.includes("second class") || s.includes("distinction");
 }
 
+export function isATKT(status: string | undefined): boolean {
+  if (!status) return false;
+  // Strip dots so "A.T.K.T" → "atkt" before comparing
+  const s = status.toLowerCase().replace(/\./g, "");
+  return s === "atkt" || s.includes("atkt");
+}
+
 export function isFailed(status: string | undefined): boolean {
   if (!status) return false;
+  // ATKT is NOT a plain fail — exclude it
+  if (isATKT(status)) return false;
   const s = status.toLowerCase();
-  return s.includes("fail") || s === "f.f." || s.includes("atkt");
+  return s.includes("fail") || s === "ff" || s === "f.f.";
 }
 
 export function sleep(ms: number): Promise<void> {
@@ -61,6 +70,7 @@ export function calculateStats(students: import("@/types").StudentResult[]) {
       totalStudents: 0,
       passCount: 0,
       failCount: 0,
+      atktCount: 0,
       passPercentage: 0,
       distinctionCount: 0,
       firstClassCount: 0,
@@ -70,7 +80,8 @@ export function calculateStats(students: import("@/types").StudentResult[]) {
   }
 
   const passCount = students.filter((s) => isPassed(s.finalStatus)).length;
-  const failCount = students.length - passCount;
+  const atktCount = students.filter((s) => isATKT(s.finalStatus)).length;
+  const failCount = students.length - passCount - atktCount;
   const passPercentage = (passCount / students.length) * 100;
   const distinctionCount = students.filter((s) => (isNaN(s.percentage) ? 0 : s.percentage) >= 75).length;
   const firstClassCount = students.filter(
@@ -88,6 +99,7 @@ export function calculateStats(students: import("@/types").StudentResult[]) {
     totalStudents: students.length,
     passCount,
     failCount,
+    atktCount,
     passPercentage: Math.round(passPercentage * 100) / 100,
     distinctionCount,
     firstClassCount,
@@ -125,4 +137,32 @@ export function getSubjectFailures(students: import("@/types").StudentResult[]) 
           : 0,
     }))
     .sort((a, b) => b.failPercentage - a.failPercentage);
+}
+
+export function getSubjectToppers(students: import("@/types").StudentResult[]) {
+  const subjectBest: Record<string, { student: import("@/types").StudentResult; total: number }> = {};
+
+  students.forEach((student) => {
+    if (!isPassed(student.finalStatus)) return; // only passed students
+    student.subjects.forEach((subj) => {
+      const total =
+        (Number(subj.faTh) || 0) +
+        (Number(subj.saTh) || 0) +
+        (Number(subj.faPr) || 0) +
+        (Number(subj.saPr) || 0) +
+        (Number(subj.sla) || 0);
+
+      const existing = subjectBest[subj.subjectName];
+      if (!existing || total > existing.total) {
+        subjectBest[subj.subjectName] = { student, total };
+      }
+    });
+  });
+
+  return Object.entries(subjectBest).map(([subjectName, { student, total }]) => ({
+    subjectName,
+    studentName: student.name,
+    seatNo: student.seatNo,
+    totalMarks: total,
+  }));
 }

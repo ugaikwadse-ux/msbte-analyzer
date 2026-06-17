@@ -8,7 +8,7 @@ import {
   Search, ChevronDown, Building2, BookOpen,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-import { getAnalyses, getDepartments, deleteAnalysis } from "@/lib/db";
+import { getAnalyses, getDepartments, deleteAnalysis, getUserProfile } from "@/lib/db";
 import { fetchResultsBatch } from "@/lib/api";
 import { saveAnalysis, updateAnalysis } from "@/lib/db";
 import { calculateStats, getSubjectFailures, generateSeatRange, formatDate, isPassed } from "@/lib/utils";
@@ -73,7 +73,11 @@ export default function AnalysesPage() {
       return;
     }
 
-    const isPremium = subscriptionPlan === "premium" || subscriptionPlan === "institute";
+    // Fresh check to prevent bypass on long-running sessions
+    const profile = await getUserProfile(user.uid);
+    const plan = profile?.subscription || "free";
+    const isPremium = plan === "premium" || plan === "institute" || user.email === "master@msbteresult.online";
+
     if (!isPremium && seats.length > 20) {
       toast({
         title: "Upgrade Required",
@@ -101,6 +105,7 @@ export default function AnalysesPage() {
         processedStudents: 0,
         passCount: 0,
         failCount: 0,
+        atktCount: 0,
         passPercentage: 0,
         distinctionCount: 0,
         firstClassCount: 0,
@@ -133,6 +138,7 @@ export default function AnalysesPage() {
         processedStudents: studentResults.length,
         passCount: stats.passCount,
         failCount: stats.failCount,
+        atktCount: stats.atktCount,
         passPercentage: stats.passPercentage,
         distinctionCount: stats.distinctionCount,
         firstClassCount: stats.firstClassCount,
@@ -305,7 +311,7 @@ export default function AnalysesPage() {
 
       {/* Generate dialog */}
       <Dialog open={generateOpen} onOpenChange={(open) => { if (!generating) setGenerateOpen(open); }}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md" onInteractOutside={(e) => e.preventDefault()}>
           <DialogHeader>
             <DialogTitle>Generate Batch Analysis</DialogTitle>
             <DialogDescription>

@@ -13,15 +13,15 @@ import {
 } from "recharts";
 import { useAuth } from "@/hooks/useAuth";
 import { getAnalysis } from "@/lib/db";
-import { exportToCSV } from "@/lib/exports";
-import { isPassed, isFailed, calculateStats } from "@/lib/utils";
+import { exportToExcel } from "@/lib/exports";
+import { isPassed, isFailed, isATKT, calculateStats, getSubjectToppers } from "@/lib/utils";
 import type { Analysis, StudentResult } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input, Card, CardContent, CardHeader, CardTitle, Badge, Skeleton } from "@/components/ui/elements";
 import { toast } from "@/components/ui/toaster";
 import Link from "next/link";
 
-const COLORS = ["#2563EB", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#06B6D4"];
+const COLORS = ["#2563EB", "#10B981", "#06B6D4", "#F59E0B", "#EF4444", "#8B5CF6"];
 const ROWS_PER_PAGE = 25;
 
 type SortDir = "asc" | "desc";
@@ -99,15 +99,21 @@ export default function AnalysisDetailPage() {
     setPage(1);
   };
 
-  const handleExportCSV = () => {
+  const handleExportExcel = async () => {
     if (!analysis) return;
-    exportToCSV(analysis, { format: "csv", includeWatermark: !isPremium });
-    toast({ title: "CSV exported", variant: "success" });
+    await exportToExcel(analysis, { format: "csv", includeWatermark: !isPremium });
+    toast({ title: "Excel file exported", variant: "success" });
   };
+
+  const subjectToppers = useMemo(() => {
+    if (!analysis?.students) return [];
+    return getSubjectToppers(analysis.students);
+  }, [analysis]);
 
   const pieData = analysis
     ? [
         { name: "Pass", value: analysis.passCount },
+        { name: "A.T.K.T", value: analysis.atktCount ?? 0 },
         { name: "Fail", value: analysis.failCount },
       ]
     : [];
@@ -117,6 +123,7 @@ export default function AnalysisDetailPage() {
         { name: "Distinction\n(≥75%)", value: analysis.distinctionCount },
         { name: "First Class\n(60–74%)", value: analysis.firstClassCount },
         { name: "Second Class\n(45–59%)", value: analysis.passCount - analysis.distinctionCount - analysis.firstClassCount },
+        { name: "A.T.K.T", value: analysis.atktCount ?? 0 },
         { name: "Fail", value: analysis.failCount },
       ]
     : [];
@@ -181,9 +188,9 @@ export default function AnalysisDetailPage() {
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <Button variant="outline" size="sm" onClick={handleExportCSV} className="gap-2">
+          <Button variant="outline" size="sm" onClick={handleExportExcel} className="gap-2">
             <FileSpreadsheet className="h-4 w-4" />
-            Export CSV
+            Export Excel
           </Button>
           {!isPremium && (
             <Link href="/dashboard/subscription">
@@ -204,7 +211,7 @@ export default function AnalysisDetailPage() {
           { label: "Fail Count", value: analysis.failCount, color: "text-red-600", bg: "bg-red-50 dark:bg-red-950/40" },
           { label: "Pass %", value: `${analysis.passPercentage.toFixed(1)}%`, color: "text-purple-600", bg: "bg-purple-50 dark:bg-purple-950/40" },
           { label: "Distinction", value: analysis.distinctionCount, color: "text-orange-600", bg: "bg-orange-50 dark:bg-orange-950/40" },
-          { label: "First Class", value: analysis.firstClassCount, color: "text-cyan-600", bg: "bg-cyan-50 dark:bg-cyan-950/40" },
+          { label: "ATKT Count", value: analysis.atktCount, color: "text-yellow-600", bg: "bg-yellow-50 dark:bg-yellow-950/40" },
         ].map((s) => (
           <Card key={s.label} className="text-center">
             <CardContent className="p-4">
@@ -295,12 +302,16 @@ export default function AnalysisDetailPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {paginatedStudents.map((student, idx) => (
-                    <tr key={student.seatNo} className={idx % 2 === 0 ? "bg-background" : "bg-muted/30"}>
-                      <td className={`sticky left-0 z-10 font-mono text-xs text-muted-foreground ${idx % 2 === 0 ? "bg-background" : "bg-slate-50 dark:bg-slate-900"}`}>
+                  {paginatedStudents.map((student, idx) => {
+                    const rowBg = idx % 2 === 0
+                      ? "bg-white dark:bg-slate-950"
+                      : "bg-slate-50 dark:bg-slate-900";
+                    return (
+                    <tr key={student.seatNo} className={`${rowBg} hover:bg-blue-50 dark:hover:bg-blue-950/40 group/row`}>
+                      <td className={`sticky left-0 z-10 font-mono text-xs text-muted-foreground ${rowBg} group-hover/row:bg-blue-50 dark:group-hover/row:bg-blue-950/40`}>
                         {student.seatNo}
                       </td>
-                      <td className={`sticky left-[130px] z-10 font-medium text-foreground shadow-[1px_0_0_rgba(0,0,0,0.1)] ${idx % 2 === 0 ? "bg-background" : "bg-slate-50 dark:bg-slate-900"}`}>
+                      <td className={`sticky left-[130px] z-10 font-medium text-foreground shadow-[2px_0_4px_rgba(0,0,0,0.08)] ${rowBg} group-hover/row:bg-blue-50 dark:group-hover/row:bg-blue-950/40`}>
                         {student.name}
                       </td>
                       {allSubjects.map((subjName) => {
@@ -321,15 +332,17 @@ export default function AnalysisDetailPage() {
                         <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
                           isPassed(student.finalStatus)
                             ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300"
-                            : isFailed(student.finalStatus)
-                              ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"
-                              : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300"
+                            : isATKT(student.finalStatus)
+                              ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300"
+                              : isFailed(student.finalStatus)
+                                ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"
+                                : "bg-gray-100 text-gray-700 dark:bg-gray-900/40 dark:text-gray-300"
                         }`}>
                           {student.finalStatus}
                         </span>
                       </td>
                     </tr>
-                  ))}
+                  )})}
                 </tbody>
               </table>
             </div>
@@ -457,6 +470,58 @@ export default function AnalysisDetailPage() {
             </CardContent>
           </Card>
 
+          {/* Subject-wise Toppers */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Trophy className="h-5 w-5 text-blue-500" />
+                Subject-wise Toppers
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-border bg-muted/50">
+                      <th className="text-left px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Subject</th>
+                      <th className="text-left px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Topper Name</th>
+                      <th className="text-left px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Seat No</th>
+                      <th className="text-center px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Total Marks</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {subjectToppers.map((st, idx) => (
+                      <tr key={st.subjectName} className={idx % 2 === 0 ? "bg-background" : "bg-muted/30"}>
+                        <td className="px-6 py-3 text-sm font-medium text-foreground">{st.subjectName}</td>
+                        <td className="px-6 py-3">
+                          <div className="flex items-center gap-2">
+                            <div className="h-6 w-6 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center flex-shrink-0">
+                              <Trophy className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+                            </div>
+                            <span className="text-sm font-medium text-foreground">{st.studentName}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-3 text-sm font-mono text-muted-foreground">{st.seatNo}</td>
+                        <td className="px-6 py-3 text-center">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
+                            {st.totalMarks}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                    {subjectToppers.length === 0 && (
+                      <tr>
+                        <td colSpan={4} className="px-6 py-8 text-center text-sm text-muted-foreground">
+                          No subject toppers found.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Subject failures */}
           <Card>
             <CardHeader>
@@ -496,14 +561,14 @@ export default function AnalysisDetailPage() {
         <div className="grid lg:grid-cols-2 gap-6">
           <Card>
             <CardHeader>
-              <CardTitle>Pass vs Fail</CardTitle>
+              <CardTitle>Pass / A.T.K.T / Fail</CardTitle>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={250}>
                 <PieChart>
                   <Pie data={pieData} cx="50%" cy="50%" outerRadius={90} dataKey="value" label={({ name, value }) => `${name}: ${value}`}>
                     {pieData.map((_, idx) => (
-                      <Cell key={idx} fill={idx === 0 ? "#10B981" : "#EF4444"} />
+                      <Cell key={idx} fill={idx === 0 ? "#10B981" : idx === 1 ? "#F59E0B" : "#EF4444"} />
                     ))}
                   </Pie>
                   <Tooltip />

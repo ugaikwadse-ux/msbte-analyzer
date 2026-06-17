@@ -36,7 +36,7 @@ const plans = [
   {
     id: "institute",
     name: "Institute",
-    price: "₹2999",
+    price: "₹1599",
     period: "for 1 month",
     icon: Building2,
     color: "text-green-600",

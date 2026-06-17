@@ -38,7 +38,7 @@ const plans = [
   {
     id: "institute" as const,
     name: "Institute",
-    price: "₹2999",
+    price: "₹1599",
     period: "for 1 month",
     icon: Building2,
     color: "text-green-600",
@@ -111,12 +111,15 @@ export default function SubscriptionPage() {
 
     setProcessingPlan(selectedPlan);
     try {
+      const planPrices: Record<string, number> = { institute: 1599 };
+      const amount = planPrices[selectedPlan] || 1599;
+
       const res = await fetch('/api/payment/initiate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           planId: selectedPlan, 
-          amount: 1, // Temporarily set to 1 Rs for testing
+          amount,
           email: user.email, 
           phone: phoneNumber,
           userId: user.uid 
@@ -164,22 +167,7 @@ export default function SubscriptionPage() {
     }
   };
 
-  const handleDowngrade = async () => {
-    if (!user) return;
-    try {
-      await saveSubscription({
-        userId: user.uid,
-        plan: "free",
-        status: "active",
-        createdAt: new Date(),
-        startDate: new Date(),
-      });
-      toast({ title: "Downgraded to Free plan", variant: "success" });
-      setTimeout(() => window.location.reload(), 1500);
-    } catch {
-      toast({ title: "Failed to downgrade", variant: "error" });
-    }
-  };
+
 
   return (
     <div className="space-y-8">
@@ -193,7 +181,7 @@ export default function SubscriptionPage() {
       {/* Current plan banner */}
       {subscription && subscriptionPlan !== "free" && (
         <Card className="border-primary bg-primary/5">
-          <CardContent className="p-5 flex items-center justify-between gap-4">
+          <CardContent className="p-5 flex items-center gap-4">
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-xl gradient-bg flex items-center justify-center">
                 <Building2 className="h-5 w-5 text-white" />
@@ -207,9 +195,6 @@ export default function SubscriptionPage() {
                 </p>
               </div>
             </div>
-            <Button variant="outline" size="sm" onClick={handleDowngrade}>
-              Downgrade to Free
-            </Button>
           </CardContent>
         </Card>
       )}
@@ -263,9 +248,16 @@ export default function SubscriptionPage() {
                 </ul>
 
                 {isCurrent ? (
-                  <Button className="w-full" variant="outline" disabled>
-                    ✓ Current Plan
-                  </Button>
+                  <div className="space-y-2">
+                    <Button className="w-full" variant="outline" disabled>
+                      ✓ Current Plan
+                    </Button>
+                    {plan.id !== "free" && subscription && (
+                      <p className="text-xs text-center text-muted-foreground font-medium">
+                        Expires on: {new Date(subscription.startDate.getTime() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString()}
+                      </p>
+                    )}
+                  </div>
                 ) : isUpgrade && plan.id !== "free" ? (
                   <Button
                     className="w-full"
