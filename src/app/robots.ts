@@ -11,6 +11,6 @@ export default function robots(): MetadataRoute.Robots {
         "/api/",
       ],
     },
-    sitemap: "https://msbteresult.online/sitemap.xml",
+    sitemap: "https://www.msbteresult.online/sitemap.xml",
   };
 }

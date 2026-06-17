@@ -1,7 +1,7 @@
 import { MetadataRoute } from "next";
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const baseUrl = "https://msbteresult.online";
+  const baseUrl = "https://www.msbteresult.online";
   
   // Publicly crawlable routes
   const routes = [

@@ -34,7 +34,7 @@ export const metadata: Metadata = {
     "Maharashtra",
     "engineering",
   ],
-  metadataBase: new URL("https://msbteresult.online"),
+  metadataBase: new URL("https://www.msbteresult.online"),
   alternates: {
     canonical: "/",
   },
@@ -42,7 +42,7 @@ export const metadata: Metadata = {
     title: "MSBTE Result Analyzer | MSBTE Summer Result Analysis",
     description:
       "Check your MSBTE result & generate comprehensive department-wise diploma result analysis, toppers list, and charts in minutes.",
-    url: "https://msbteresult.online",
+    url: "https://www.msbteresult.online",
     siteName: "MSBTE Result Analyzer",
     locale: "en_US",
     type: "website",
@@ -73,7 +73,7 @@ const jsonLd = {
   "@context": "https://schema.org",
   "@type": "WebApplication",
   "name": "MSBTE Result Analyzer",
-  "url": "https://msbteresult.online",
+  "url": "https://www.msbteresult.online",
   "description": "Automatically analyze MSBTE diploma results, check MSBTE Summer & Winter results, generate department-wise stats, toppers list, and pass percentage charts.",
   "applicationCategory": "EducationalApplication",
   "operatingSystem": "All",
@@ -92,7 +92,7 @@ const jsonLd = {
   "creator": {
     "@type": "Organization",
     "name": "MSBTE Result Analyzer",
-    "url": "https://msbteresult.online"
+    "url": "https://www.msbteresult.online"
   }
 };
 
