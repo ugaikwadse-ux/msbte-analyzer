@@ -116,26 +116,37 @@ export default function AnalysesPage() {
         createdAt: new Date(),
       });
 
-      await fetchResultsBatch(
+      const { results, failed, abortedReason } = await fetchResultsBatch(
         seats,
         (current, seat, result) => {
           setProgress((p) => ({ ...p, current }));
-          if (result) studentResults.push(result);
         }
       );
 
+      if (abortedReason) {
+        await updateAnalysis(analysisId, { status: "failed" });
+        toast({
+          title: "Generation aborted",
+          description: abortedReason,
+          variant: "error",
+        });
+        setProgress((p) => ({ ...p, status: "error" }));
+        setGenerating(false);
+        return;
+      }
+
       // Compute stats
-      const stats = calculateStats(studentResults);
-      const subjectFailures = getSubjectFailures(studentResults);
-      const toppers = [...studentResults]
+      const stats = calculateStats(results);
+      const subjectFailures = getSubjectFailures(results);
+      const toppers = [...results]
         .filter((s) => isPassed(s.finalStatus))
         .sort((a, b) => b.percentage - a.percentage)
         .slice(0, 10);
 
       await updateAnalysis(analysisId, {
-        students: studentResults,
-        totalStudents: studentResults.length,
-        processedStudents: studentResults.length,
+        students: results,
+        totalStudents: results.length,
+        processedStudents: results.length,
         passCount: stats.passCount,
         failCount: stats.failCount,
         atktCount: stats.atktCount,
@@ -156,9 +167,9 @@ export default function AnalysesPage() {
         startSeat,
         endSeat,
         ...stats,
-        totalStudents: studentResults.length,
-        processedStudents: studentResults.length,
-        students: studentResults,
+        totalStudents: results.length,
+        processedStudents: results.length,
+        students: results,
         toppers,
         subjectFailures,
         status: "completed",
@@ -167,7 +178,7 @@ export default function AnalysesPage() {
 
       setAnalyses((prev) => [newAnalysis, ...prev]);
       setProgress({ current: seats.length, total: seats.length, status: "completed" });
-      toast({ title: `Analysis complete — ${studentResults.length} students processed`, variant: "success" });
+      toast({ title: `Analysis complete — ${results.length} students processed`, variant: "success" });
       setTimeout(() => {
         setGenerateOpen(false);
         setGenerating(false);

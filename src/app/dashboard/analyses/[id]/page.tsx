@@ -101,7 +101,7 @@ export default function AnalysisDetailPage() {
         ? analysis.students[0].subjects.map((s) => s.subjectName)
         : undefined;
 
-      const { results, failed } = await fetchResultsBatch(
+      const { results, failed, abortedReason } = await fetchResultsBatch(
         newSeats,
         (current, seat, result) => {
           setAddProgress((p) => ({ ...p, current }));
@@ -109,6 +109,20 @@ export default function AnalysisDetailPage() {
         undefined,
         expectedSubjects
       );
+
+      if (abortedReason) {
+        toast({
+          title: "Analysis aborted",
+          description: abortedReason,
+          variant: "error",
+        });
+        setAdding(false);
+        setAddProgress({ current: 0, total: 0, status: "idle" });
+        setTimeout(() => {
+          setAddStudentsOpen(false);
+        }, 1500);
+        return;
+      }
 
       if (results.length === 0) {
         toast({
@@ -212,12 +226,26 @@ export default function AnalysisDetailPage() {
     setAddStudentsOpen(true);
 
     try {
-      const { results, failed } = await fetchResultsBatch(
+      const { results, failed, abortedReason } = await fetchResultsBatch(
         seats,
         (current, seat, result) => {
           setAddProgress((p) => ({ ...p, current }));
         }
       );
+
+      if (abortedReason) {
+        toast({
+          title: "Re-analysis aborted",
+          description: abortedReason,
+          variant: "error",
+        });
+        setReanalyzing(false);
+        setAddProgress({ current: 0, total: 0, status: "idle" });
+        setTimeout(() => {
+          setAddStudentsOpen(false);
+        }, 1500);
+        return;
+      }
 
       if (results.length === 0) {
         toast({
@@ -349,6 +377,17 @@ export default function AnalysisDetailPage() {
   const showAggregateCols = useMemo(() => {
     if (!analysis?.students) return false;
     return analysis.students.some((s) => String(s.remarks || "").toLowerCase().includes("6k"));
+  }, [analysis]);
+
+  const missingAggregateStudents = useMemo(() => {
+    if (!analysis?.students) return [];
+    return analysis.students.filter((s) => {
+      const is6k = String(s.remarks || "").toLowerCase().includes("6k");
+      if (!is6k) return false;
+      const hasMarks = s.aggregateMarks && String(s.aggregateMarks).trim() !== "" && String(s.aggregateMarks).trim() !== "-";
+      const hasPct = s.aggregatePercentage && String(s.aggregatePercentage).trim() !== "" && String(s.aggregatePercentage).trim() !== "-";
+      return !hasMarks || !hasPct;
+    });
   }, [analysis]);
 
   const filteredStudents = useMemo(() => {
@@ -540,6 +579,30 @@ export default function AnalysisDetailPage() {
             className="bg-amber-600 hover:bg-amber-700 text-white border-0 shrink-0 self-start sm:self-center"
           >
             Fetch & Add {missingSeats.length} Missing Seat(s)
+          </Button>
+        </Alert>
+      )}
+
+      {missingAggregateStudents.length > 0 && (
+        <Alert variant="destructive" className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-3 border-red-300 dark:border-red-900 bg-red-50/50 dark:bg-red-950/20">
+          <div className="flex items-start sm:items-center gap-3">
+            <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5 sm:mt-0" />
+            <div>
+              <h4 className="font-semibold text-red-800 dark:text-red-200">Missing 6th Sem Student Aggregate Details</h4>
+              <p className="text-sm text-red-700 dark:text-red-300 mt-0.5">
+                {missingAggregateStudents.length} student(s) in this 6th semester batch are missing aggregate marks and percentage:{" "}
+                <span className="font-mono font-semibold">{missingAggregateStudents.map((s) => s.seatNo).join(", ")}</span>.
+                Please re-analyze the batch to fetch their aggregate details.
+              </p>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            onClick={handleReanalyze}
+            loading={reanalyzing}
+            className="bg-red-600 hover:bg-red-700 text-white border-0 shrink-0 self-start sm:self-center"
+          >
+            Re-analyze Batch
           </Button>
         </Alert>
       )}

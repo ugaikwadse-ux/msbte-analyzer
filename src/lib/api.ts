@@ -143,7 +143,7 @@ export async function fetchResultsBatch(
   onProgress: (current: number, seat: string, result: StudentResult | null) => void,
   signal?: AbortSignal,
   expectedSubjects?: string[]
-): Promise<{ results: StudentResult[]; failed: string[] }> {
+): Promise<{ results: StudentResult[]; failed: string[]; abortedReason?: string }> {
   const results: StudentResult[] = [];
   const failed: string[] = [];
   
@@ -158,15 +158,30 @@ export async function fetchResultsBatch(
     const result = await fetchStudentResult(seat);
 
     if (result) {
-      const currentSubjectsKey = result.subjects
-        .map((s) => s.subjectName.trim())
-        .sort()
-        .join("|");
-
       if (!firstSubjectsKey) {
-        firstSubjectsKey = currentSubjectsKey;
-      } else if (firstSubjectsKey !== currentSubjectsKey) {
-        throw new Error("Different subject detected. Maybe another department. Analysis aborted.");
+        firstSubjectsKey = result.subjects.map((s) => s.subjectName.trim()).sort().join("|");
+      } else {
+        const firstSet = new Set(firstSubjectsKey.split("|").map(s => s.toLowerCase().trim()));
+        const currentSet = new Set(result.subjects.map(s => s.subjectName.toLowerCase().trim()));
+
+        let intersectionSize = 0;
+        currentSet.forEach((subj) => {
+          if (firstSet.has(subj)) {
+            intersectionSize++;
+          }
+        });
+
+        // Abort if there is no subject overlap, or if they have >= 3 subjects but share less than 2
+        const isDifferent = intersectionSize === 0 || 
+          (firstSet.size >= 3 && currentSet.size >= 3 && intersectionSize < 2);
+
+        if (isDifferent) {
+          return {
+            results,
+            failed,
+            abortedReason: "Different subject detected. Maybe another department. Analysis aborted."
+          };
+        }
       }
       results.push(result);
     } else {
