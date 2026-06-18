@@ -500,7 +500,7 @@ export default function AnalysisDetailPage() {
                         ));
                       })}
                       <td className="text-center font-medium">{isNaN(student.totalMarks) ? "—" : student.totalMarks}</td>
-                      <td className="text-center font-bold text-primary">{isNaN(student.percentage) ? "—" : `${student.percentage}%`}</td>
+                      <td className="text-center font-bold text-primary">{isPassed(student.finalStatus) && !isNaN(student.percentage) ? `${student.percentage}%` : "—"}</td>
                       <td className="text-center text-muted-foreground">{isNaN(student.totalCredit) ? "—" : student.totalCredit}</td>
                       <td className="text-center text-xs">{student.remarks || "—"}</td>
                       <td className="text-center">

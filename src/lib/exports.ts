@@ -115,7 +115,7 @@ export async function exportToExcel(analysis: Analysis, options: ExportOptions) 
 
     row.push(
       isNaN(student.totalMarks) ? "—" : student.totalMarks,
-      isNaN(student.percentage) ? "—" : `${student.percentage}%`,
+      isPassed(student.finalStatus) && !isNaN(student.percentage) ? `${student.percentage}%` : "—",
       isNaN(student.totalCredit) ? "—" : student.totalCredit,
       student.remarks || "—",
       student.finalStatus
@@ -231,7 +231,13 @@ export function exportToCSV(analysis: Analysis, options: ExportOptions) {
         subj?.credits ?? ""
       );
     });
-    row.push(student.totalMarks, student.percentage, student.totalCredit, student.remarks, student.finalStatus);
+    row.push(
+      student.totalMarks,
+      isPassed(student.finalStatus) && !isNaN(student.percentage) ? student.percentage : "",
+      student.totalCredit,
+      student.remarks,
+      student.finalStatus
+    );
     return row;
   });
 
