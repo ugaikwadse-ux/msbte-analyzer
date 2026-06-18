@@ -5,19 +5,21 @@ import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft, Download, FileText, Users, TrendingUp, Trophy,
   AlertTriangle, Search, ChevronUp, ChevronDown, FileSpreadsheet,
-  BarChart2, Lock, ChevronLeft, ChevronRight,
+  BarChart2, Lock, ChevronLeft, ChevronRight, Plus,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend,
 } from "recharts";
 import { useAuth } from "@/hooks/useAuth";
-import { getAnalysis } from "@/lib/db";
+import { getAnalysis, updateAnalysis, getUserProfile } from "@/lib/db";
 import { exportToExcel } from "@/lib/exports";
-import { isPassed, isFailed, isATKT, calculateStats, getSubjectToppers } from "@/lib/utils";
+import { isPassed, isFailed, isATKT, calculateStats, getSubjectToppers, getSubjectFailures, generateSeatRange } from "@/lib/utils";
+import { fetchResultsBatch } from "@/lib/api";
 import type { Analysis, StudentResult } from "@/types";
 import { Button } from "@/components/ui/button";
-import { Input, Card, CardContent, CardHeader, CardTitle, Badge, Skeleton } from "@/components/ui/elements";
+import { Input, Card, CardContent, CardHeader, CardTitle, Badge, Skeleton, Label, Progress, Alert } from "@/components/ui/elements";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/toaster";
 import Link from "next/link";
 
@@ -37,6 +39,139 @@ export default function AnalysisDetailPage() {
   const [sortKey, setSortKey] = useState<keyof StudentResult>("seatNo");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [activeTab, setActiveTab] = useState<"table" | "stats" | "charts">("table");
+
+  // State for adding remaining/left-out students
+  const [addStudentsOpen, setAddStudentsOpen] = useState(false);
+  const [newSeatsInput, setNewSeatsInput] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [addProgress, setAddProgress] = useState({ current: 0, total: 0, status: "idle" });
+
+  const handleAddStudents = async () => {
+    if (!analysis || !user) return;
+
+    const seats = newSeatsInput
+      .split(/[\s,;\n\t]+/)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+
+    if (seats.length === 0) {
+      toast({ title: "No seat numbers entered", description: "Please enter at least one seat number.", variant: "error" });
+      return;
+    }
+
+    const existingSeats = new Set(analysis.students.map((s) => s.seatNo));
+    const newSeats = seats.filter((s) => !existingSeats.has(s));
+
+    if (newSeats.length === 0) {
+      toast({ title: "No new seat numbers", description: "All entered seat numbers already exist in this analysis.", variant: "warning" });
+      return;
+    }
+
+    // Fresh check to prevent bypass on long-running sessions
+    const profile = await getUserProfile(user.uid);
+    const plan = profile?.subscription || "free";
+    const isPremiumUser = plan === "premium" || plan === "institute" || user.email === "master@msbteresult.online";
+
+    const totalExpectedCount = analysis.students.length + newSeats.length;
+    if (!isPremiumUser && totalExpectedCount > 20) {
+      toast({
+        title: "Upgrade Required",
+        description: `Your Free plan allows up to 20 seats per batch. This action would increase the batch size to ${totalExpectedCount} seats. Please upgrade to the Institute plan.`,
+        variant: "error",
+      });
+      return;
+    }
+
+    if (totalExpectedCount > 500) {
+      toast({
+        title: "Limit Exceeded",
+        description: `Max 500 seats per analysis. This action would exceed that limit (current: ${analysis.students.length}, new: ${newSeats.length}).`,
+        variant: "error",
+      });
+      return;
+    }
+
+    setAdding(true);
+    setAddProgress({ current: 0, total: newSeats.length, status: "processing" });
+
+    try {
+      const { results, failed } = await fetchResultsBatch(
+        newSeats,
+        (current, seat, result) => {
+          setAddProgress((p) => ({ ...p, current }));
+        }
+      );
+
+      if (results.length === 0) {
+        toast({
+          title: "No students fetched",
+          description: `Failed to fetch results for all ${newSeats.length} seat numbers. Please check if they are valid.`,
+          variant: "error",
+        });
+        setAdding(false);
+        setAddProgress({ current: 0, total: 0, status: "idle" });
+        return;
+      }
+
+      const updatedStudents = [...analysis.students, ...results];
+      const stats = calculateStats(updatedStudents);
+      const subjectFailures = getSubjectFailures(updatedStudents);
+      const toppers = [...updatedStudents]
+        .filter((s) => isPassed(s.finalStatus))
+        .sort((a, b) => b.percentage - a.percentage)
+        .slice(0, 10);
+
+      const updatedData = {
+        students: updatedStudents,
+        totalStudents: updatedStudents.length,
+        processedStudents: updatedStudents.length,
+        passCount: stats.passCount,
+        failCount: stats.failCount,
+        atktCount: stats.atktCount,
+        passPercentage: stats.passPercentage,
+        distinctionCount: stats.distinctionCount,
+        firstClassCount: stats.firstClassCount,
+        toppers,
+        subjectFailures,
+      };
+
+      await updateAnalysis(analysis.id, updatedData);
+
+      setAnalysis({
+        ...analysis,
+        ...stats,
+        students: updatedStudents,
+        toppers,
+        subjectFailures,
+      });
+
+      setAddProgress({ current: newSeats.length, total: newSeats.length, status: "completed" });
+
+      let message = `${results.length} students added successfully.`;
+      if (failed.length > 0) {
+        message += ` Failed to fetch ${failed.length} seat(s): ${failed.join(", ")}`;
+      }
+
+      toast({
+        title: "Analysis updated",
+        description: message,
+        variant: failed.length > 0 ? "warning" : "success",
+      });
+
+      setTimeout(() => {
+        setAddStudentsOpen(false);
+        setAdding(false);
+        setNewSeatsInput("");
+        setAddProgress({ current: 0, total: 0, status: "idle" });
+      }, 2000);
+
+    } catch (err) {
+      console.error(err);
+      setAddProgress((p) => ({ ...p, status: "error" }));
+      toast({ title: "Failed to add students", variant: "error" });
+      setAdding(false);
+    }
+  };
 
   useEffect(() => {
     if (!id) return;
@@ -64,6 +199,18 @@ export default function AnalysisDetailPage() {
       })
     );
     return subjects;
+  }, [analysis]);
+
+  const missingSeats = useMemo(() => {
+    if (!analysis) return [];
+    try {
+      const allSeats = generateSeatRange(analysis.startSeat, analysis.endSeat);
+      const existingSeats = new Set(analysis.students.map((s) => s.seatNo));
+      return allSeats.filter((seat) => !existingSeats.has(seat));
+    } catch (e) {
+      console.error("Error generating seat range", e);
+      return [];
+    }
   }, [analysis]);
 
   const filteredStudents = useMemo(() => {
@@ -188,6 +335,10 @@ export default function AnalysisDetailPage() {
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
+          <Button variant="outline" size="sm" onClick={() => setAddStudentsOpen(true)} className="gap-2">
+            <Plus className="h-4 w-4" />
+            Add Missing Students
+          </Button>
           <Button variant="outline" size="sm" onClick={handleExportExcel} className="gap-2">
             <FileSpreadsheet className="h-4 w-4" />
             Export Excel
@@ -221,6 +372,30 @@ export default function AnalysisDetailPage() {
           </Card>
         ))}
       </div>
+
+      {missingSeats.length > 0 && (
+        <Alert variant="warning" className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-3 border-amber-300 dark:border-amber-900 bg-amber-50/50 dark:bg-amber-950/20">
+          <div className="flex items-start sm:items-center gap-3">
+            <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5 sm:mt-0" />
+            <div>
+              <h4 className="font-semibold text-amber-800 dark:text-amber-200">Missing Student Records Detected</h4>
+              <p className="text-sm text-amber-700 dark:text-amber-300 mt-0.5">
+                {missingSeats.length} student result(s) in the seat range ({analysis.startSeat} — {analysis.endSeat}) are missing from this batch (possibly due to failed fetches during generation).
+              </p>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            onClick={() => {
+              setNewSeatsInput(missingSeats.join(", "));
+              setAddStudentsOpen(true);
+            }}
+            className="bg-amber-600 hover:bg-amber-700 text-white border-0 shrink-0 self-start sm:self-center"
+          >
+            Fetch & Add {missingSeats.length} Missing Seat(s)
+          </Button>
+        </Alert>
+      )}
 
       {/* Tabs */}
       <div className="flex gap-1 bg-muted p-1 rounded-xl w-fit">
@@ -617,6 +792,85 @@ export default function AnalysisDetailPage() {
           </Card>
         </div>
       )}
+
+      {/* Add Missing Students Dialog */}
+      <Dialog open={addStudentsOpen} onOpenChange={(open) => { if (!adding) setAddStudentsOpen(open); }}>
+        <DialogContent className="max-w-md" onInteractOutside={(e) => e.preventDefault()}>
+          <DialogHeader>
+            <DialogTitle>Add Missing Students</DialogTitle>
+            <DialogDescription>
+              Enter the seat numbers of the students who were missed or failed to fetch, separated by commas, spaces, or newlines.
+            </DialogDescription>
+          </DialogHeader>
+
+          {addProgress.status === "processing" || addProgress.status === "completed" ? (
+            <div className="py-4 space-y-4">
+              <div className="text-center">
+                <div className="text-4xl font-bold text-primary mb-1">
+                  {addProgress.current}
+                  <span className="text-xl text-muted-foreground"> / {addProgress.total}</span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {addProgress.status === "completed" ? "Successfully processed!" : "Fetching student results..."}
+                </p>
+              </div>
+              <Progress value={(addProgress.current / addProgress.total) * 100} />
+              {addProgress.status === "completed" && (
+                <Alert variant="success" className="text-center">
+                  ✓ Batch analysis updated successfully
+                </Alert>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="seats-input">Seat Numbers</Label>
+                <textarea
+                  id="seats-input"
+                  value={newSeatsInput}
+                  onChange={(e) => setNewSeatsInput(e.target.value)}
+                  placeholder="e.g. 2200170012, 2200170015, 2200170018"
+                  className="flex min-h-[100px] w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
+                />
+              </div>
+
+              {newSeatsInput.trim() && (() => {
+                const parsedSeats = newSeatsInput
+                  .split(/[\s,;\n\t]+/)
+                  .map((s) => s.trim())
+                  .filter((s) => s.length > 0);
+                
+                const existingSeats = new Set(analysis.students.map((s) => s.seatNo));
+                const newSeats = parsedSeats.filter((s) => !existingSeats.has(s));
+                const duplicatesCount = parsedSeats.length - newSeats.length;
+
+                return (
+                  <div className="text-xs rounded-lg p-2 bg-muted text-muted-foreground space-y-1">
+                    <p className="font-medium">Entered: {parsedSeats.length} seat(s)</p>
+                    <p className="text-primary font-medium">To fetch: {newSeats.length} new seat(s)</p>
+                    {duplicatesCount > 0 && (
+                      <p className="text-amber-600 dark:text-amber-400">{duplicatesCount} seat(s) already exist in this analysis and will be skipped.</p>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
+          {addProgress.status !== "processing" && addProgress.status !== "completed" && (
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setAddStudentsOpen(false)}>Cancel</Button>
+              <Button
+                onClick={handleAddStudents}
+                disabled={!newSeatsInput.trim()}
+                loading={adding}
+              >
+                Fetch & Add
+              </Button>
+            </DialogFooter>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
