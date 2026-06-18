@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft, Download, FileText, Users, TrendingUp, Trophy,
   AlertTriangle, Search, ChevronUp, ChevronDown, FileSpreadsheet,
-  BarChart2, Lock, ChevronLeft, ChevronRight, Plus,
+  BarChart2, Lock, ChevronLeft, ChevronRight, Plus, RefreshCw,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -45,6 +45,8 @@ export default function AnalysisDetailPage() {
   const [newSeatsInput, setNewSeatsInput] = useState("");
   const [adding, setAdding] = useState(false);
   const [addProgress, setAddProgress] = useState({ current: 0, total: 0, status: "idle" });
+
+  const [reanalyzing, setReanalyzing] = useState(false);
 
   const handleAddStudents = async () => {
     if (!analysis || !user) return;
@@ -95,11 +97,17 @@ export default function AnalysisDetailPage() {
     setAddProgress({ current: 0, total: newSeats.length, status: "processing" });
 
     try {
+      const expectedSubjects = analysis.students.length > 0
+        ? analysis.students[0].subjects.map((s) => s.subjectName)
+        : undefined;
+
       const { results, failed } = await fetchResultsBatch(
         newSeats,
         (current, seat, result) => {
           setAddProgress((p) => ({ ...p, current }));
-        }
+        },
+        undefined,
+        expectedSubjects
       );
 
       if (results.length === 0) {
@@ -165,11 +173,126 @@ export default function AnalysisDetailPage() {
         setAddProgress({ current: 0, total: 0, status: "idle" });
       }, 2000);
 
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
       setAddProgress((p) => ({ ...p, status: "error" }));
-      toast({ title: "Failed to add students", variant: "error" });
+      toast({
+        title: "Failed to add students",
+        description: err?.message || "An unknown error occurred",
+        variant: "error",
+      });
       setAdding(false);
+      setTimeout(() => {
+        setAddStudentsOpen(false);
+      }, 2000);
+    }
+  };
+
+  const handleReanalyze = async () => {
+    if (!analysis || !user) return;
+
+    const seats = generateSeatRange(analysis.startSeat, analysis.endSeat);
+
+    // Fresh check to prevent bypass on long-running sessions
+    const profile = await getUserProfile(user.uid);
+    const plan = profile?.subscription || "free";
+    const isPremiumUser = plan === "premium" || plan === "institute" || user.email === "master@msbteresult.online";
+
+    if (!isPremiumUser && seats.length > 20) {
+      toast({
+        title: "Upgrade Required",
+        description: `Your Free plan allows up to 20 seats per batch. This batch has ${seats.length} seats. Please upgrade to the Institute plan.`,
+        variant: "error",
+      });
+      return;
+    }
+
+    setReanalyzing(true);
+    setAddProgress({ current: 0, total: seats.length, status: "processing" });
+    setAddStudentsOpen(true);
+
+    try {
+      const { results, failed } = await fetchResultsBatch(
+        seats,
+        (current, seat, result) => {
+          setAddProgress((p) => ({ ...p, current }));
+        }
+      );
+
+      if (results.length === 0) {
+        toast({
+          title: "Re-analysis failed",
+          description: "Could not fetch results for any students in the range.",
+          variant: "error",
+        });
+        setReanalyzing(false);
+        setAddStudentsOpen(false);
+        setAddProgress({ current: 0, total: 0, status: "idle" });
+        return;
+      }
+
+      const stats = calculateStats(results);
+      const subjectFailures = getSubjectFailures(results);
+      const toppers = [...results]
+        .filter((s) => isPassed(s.finalStatus))
+        .sort((a, b) => b.percentage - a.percentage)
+        .slice(0, 10);
+
+      const updatedData = {
+        students: results,
+        totalStudents: results.length,
+        processedStudents: results.length,
+        passCount: stats.passCount,
+        failCount: stats.failCount,
+        atktCount: stats.atktCount,
+        passPercentage: stats.passPercentage,
+        distinctionCount: stats.distinctionCount,
+        firstClassCount: stats.firstClassCount,
+        toppers,
+        subjectFailures,
+      };
+
+      await updateAnalysis(analysis.id, updatedData);
+
+      setAnalysis({
+        ...analysis,
+        ...stats,
+        students: results,
+        toppers,
+        subjectFailures,
+      });
+
+      setAddProgress({ current: seats.length, total: seats.length, status: "completed" });
+
+      let message = `Successfully re-analyzed all ${results.length} students.`;
+      if (failed.length > 0) {
+        message += ` Failed to fetch ${failed.length} seat(s): ${failed.join(", ")}`;
+      }
+
+      toast({
+        title: "Re-analysis complete",
+        description: message,
+        variant: failed.length > 0 ? "warning" : "success",
+      });
+
+      setTimeout(() => {
+        setAddStudentsOpen(false);
+        setReanalyzing(false);
+        setAddProgress({ current: 0, total: 0, status: "idle" });
+      }, 2000);
+
+    } catch (err: any) {
+      console.error(err);
+      setAddProgress((p) => ({ ...p, status: "error" }));
+      toast({
+        title: "Re-analysis failed",
+        description: err?.message || "An unknown error occurred",
+        variant: "error",
+      });
+      setReanalyzing(false);
+      setTimeout(() => {
+        setAddStudentsOpen(false);
+      }, 2000);
     }
   };
 
@@ -178,7 +301,17 @@ export default function AnalysisDetailPage() {
     getAnalysis(id).then((a) => {
       if (a && a.students) {
         const freshStats = calculateStats(a.students);
-        setAnalysis({ ...a, ...freshStats });
+        const freshSubjectFailures = getSubjectFailures(a.students);
+        const freshToppers = [...a.students]
+          .filter((s) => isPassed(s.finalStatus))
+          .sort((a, b) => b.percentage - a.percentage)
+          .slice(0, 10);
+        setAnalysis({
+          ...a,
+          ...freshStats,
+          subjectFailures: freshSubjectFailures,
+          toppers: freshToppers,
+        });
       } else {
         setAnalysis(a);
       }
@@ -211,6 +344,11 @@ export default function AnalysisDetailPage() {
       console.error("Error generating seat range", e);
       return [];
     }
+  }, [analysis]);
+
+  const showAggregateCols = useMemo(() => {
+    if (!analysis?.students) return false;
+    return analysis.students.some((s) => String(s.remarks || "").toLowerCase().includes("6k"));
   }, [analysis]);
 
   const filteredStudents = useMemo(() => {
@@ -328,6 +466,11 @@ export default function AnalysisDetailPage() {
             <Badge variant={analysis.status === "completed" ? "success" : "warning"}>
               {analysis.status}
             </Badge>
+            {showAggregateCols && (
+              <Badge variant="success" className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-amber-200 animate-pulse">
+                ✨ 6th Sem Aggregate Columns Active
+              </Badge>
+            )}
           </div>
           <h1 className="text-2xl font-bold text-foreground">{analysis.departmentName}</h1>
           <p className="text-muted-foreground mt-1 text-sm">
@@ -335,6 +478,10 @@ export default function AnalysisDetailPage() {
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
+          <Button variant="outline" size="sm" onClick={handleReanalyze} loading={reanalyzing} className="gap-2">
+            <RefreshCw className="h-4 w-4" />
+            Re-analyze Batch
+          </Button>
           <Button variant="outline" size="sm" onClick={() => setAddStudentsOpen(true)} className="gap-2">
             <Plus className="h-4 w-4" />
             Add Missing Students
@@ -459,6 +606,20 @@ export default function AnalysisDetailPage() {
                         % <SortIcon k="percentage" />
                       </button>
                     </th>
+                    {showAggregateCols && (
+                      <>
+                        <th className="text-center min-w-[95px]">
+                          <button onClick={() => handleSort("aggregateMarks")} className="flex items-center gap-1 mx-auto hover:text-primary-foreground/80">
+                            Agg. Marks <SortIcon k="aggregateMarks" />
+                          </button>
+                        </th>
+                        <th className="text-center min-w-[85px]">
+                          <button onClick={() => handleSort("aggregatePercentage")} className="flex items-center gap-1 mx-auto hover:text-primary-foreground/80">
+                            Agg. % <SortIcon k="aggregatePercentage" />
+                          </button>
+                        </th>
+                      </>
+                    )}
                     <th className="text-center min-w-[60px]">Cr</th>
                     <th className="text-center min-w-[80px]">Remarks</th>
                     <th className="text-center min-w-[80px]">Status</th>
@@ -473,7 +634,17 @@ export default function AnalysisDetailPage() {
                         </th>
                       ))
                     ))}
-                    <th></th><th></th><th></th><th></th><th></th>
+                    <th></th>{/* Total */}
+                    <th></th>{/* % */}
+                    {showAggregateCols && (
+                      <>
+                        <th></th>{/* Agg. Marks */}
+                        <th></th>{/* Agg. % */}
+                      </>
+                    )}
+                    <th></th>{/* Cr */}
+                    <th></th>{/* Remarks */}
+                    <th></th>{/* Status */}
                   </tr>
                 </thead>
                 <tbody>
@@ -501,6 +672,16 @@ export default function AnalysisDetailPage() {
                       })}
                       <td className="text-center font-medium">{isNaN(student.totalMarks) ? "—" : student.totalMarks}</td>
                       <td className="text-center font-bold text-primary">{isPassed(student.finalStatus) && !isNaN(student.percentage) ? `${student.percentage}%` : "—"}</td>
+                      {showAggregateCols && (
+                        <>
+                          <td className="text-center font-medium text-amber-600 dark:text-amber-400">
+                            {student.aggregateMarks || "—"}
+                          </td>
+                          <td className="text-center font-bold text-amber-600 dark:text-amber-400">
+                            {student.aggregatePercentage ? `${student.aggregatePercentage}%` : "—"}
+                          </td>
+                        </>
+                      )}
                       <td className="text-center text-muted-foreground">{isNaN(student.totalCredit) ? "—" : student.totalCredit}</td>
                       <td className="text-center text-xs">{student.remarks || "—"}</td>
                       <td className="text-center">
@@ -697,37 +878,6 @@ export default function AnalysisDetailPage() {
             </CardContent>
           </Card>
 
-          {/* Subject failures */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5 text-orange-500" />
-                Subject-wise Failure Analysis
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="divide-y divide-border">
-                {(analysis.subjectFailures || []).map((subj) => (
-                  <div key={subj.subjectName} className="flex items-center gap-4 px-6 py-3">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">{subj.subjectName}</p>
-                      <div className="flex items-center gap-3 mt-1.5">
-                        <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
-                          <div
-                            className="h-full bg-red-500 rounded-full"
-                            style={{ width: `${subj.failPercentage}%` }}
-                          />
-                        </div>
-                        <span className="text-xs text-muted-foreground flex-shrink-0">
-                          {subj.failCount} failed ({subj.failPercentage.toFixed(1)}%)
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
         </div>
       )}
 
@@ -769,23 +919,6 @@ export default function AnalysisDetailPage() {
                       <Cell key={idx} fill={COLORS[idx % COLORS.length]} />
                     ))}
                   </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-
-          <Card className="lg:col-span-2">
-            <CardHeader>
-              <CardTitle>Subject-wise Failure Rate (%)</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={280}>
-                <BarChart data={subjectChart} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-                  <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 10 }} />
-                  <YAxis dataKey="name" type="category" tick={{ fontSize: 10 }} width={100} />
-                  <Tooltip formatter={(v) => [`${v}%`, "Fail Rate"]} />
-                  <Bar dataKey="failPct" fill="#EF4444" radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>

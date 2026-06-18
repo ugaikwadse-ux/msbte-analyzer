@@ -228,12 +228,16 @@ export default function SingleResultPage() {
                   </div>
 
                   {/* Summary stats */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-6">
+                  <div className={`grid grid-cols-2 ${result.remarks?.toLowerCase().includes("6k") ? "sm:grid-cols-3 md:grid-cols-6" : "sm:grid-cols-4"} gap-4 mt-6`}>
                     {[
                       { label: "Total Marks", value: result.totalMarks, icon: BookOpen, color: "text-blue-600" },
                       { label: "Percentage", value: `${result.percentage}%`, icon: TrendingUp, color: "text-green-600" },
                       { label: "Total Credits", value: result.totalCredit, icon: Award, color: "text-purple-600" },
                       { label: "Final Status", value: result.finalStatus, icon: Award, color: isPassed(result.finalStatus) ? "text-green-600" : isFailed(result.finalStatus) ? "text-red-600" : "text-yellow-600" },
+                      ...(result.remarks?.toLowerCase().includes("6k") ? [
+                        { label: "Aggregate Marks", value: result.aggregateMarks || "—", icon: BookOpen, color: "text-amber-600" },
+                        { label: "Aggregate %", value: result.aggregatePercentage ? `${result.aggregatePercentage}%` : "—", icon: TrendingUp, color: "text-amber-600" }
+                      ] : [])
                     ].map((s) => {
                       const Icon = s.icon;
                       return (

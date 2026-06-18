@@ -16,7 +16,10 @@ export async function fetchStudentResult(seatNo: string): Promise<StudentResult 
     if (!data || data.error) return null;
 
     return parseApiResponse(seatNo, data);
-  } catch {
+  } catch (err) {
+    if (err instanceof Error && err.message.includes("Aggregate marks/percentage")) {
+      throw err;
+    }
     return null;
   }
 }
@@ -102,6 +105,25 @@ function parseApiResponse(seatNo: string, data: Record<string, unknown>): Studen
   let totalCreditVal = Number(data.totalCredit ?? data.total_credit ?? 0);
   if (isNaN(totalCreditVal)) totalCreditVal = 0;
 
+  const remarksStr = String(data.remarks ?? "");
+  const isSixthSem = remarksStr.toLowerCase().includes("6k");
+
+  const aggregateMarksVal = data.aggregateMarks ?? data.aggregate_marks;
+  const aggregatePercentageVal = data.aggregatePercentage ?? data.aggregate_percentage;
+
+  if (isSixthSem) {
+    if (
+      aggregateMarksVal === undefined ||
+      aggregateMarksVal === null ||
+      String(aggregateMarksVal).trim() === "" ||
+      aggregatePercentageVal === undefined ||
+      aggregatePercentageVal === null ||
+      String(aggregatePercentageVal).trim() === ""
+    ) {
+      throw new Error(`Aggregate marks/percentage column not found in result for 6K student (Seat No: ${seatNo}).`);
+    }
+  }
+
   return {
     seatNo,
     name: String(data.name || data.student_name || "Unknown"),
@@ -109,18 +131,25 @@ function parseApiResponse(seatNo: string, data: Record<string, unknown>): Studen
     totalMarks: totalMarksVal,
     percentage: percentageVal,
     totalCredit: totalCreditVal,
-    remarks: String(data.remarks ?? ""),
+    remarks: remarksStr,
     finalStatus: String(data.finalStatus ?? data.final_status ?? data.status ?? ""),
+    aggregateMarks: aggregateMarksVal !== undefined ? String(aggregateMarksVal) : undefined,
+    aggregatePercentage: aggregatePercentageVal !== undefined ? String(aggregatePercentageVal) : undefined,
   };
 }
 
 export async function fetchResultsBatch(
   seats: string[],
   onProgress: (current: number, seat: string, result: StudentResult | null) => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  expectedSubjects?: string[]
 ): Promise<{ results: StudentResult[]; failed: string[] }> {
   const results: StudentResult[] = [];
   const failed: string[] = [];
+  
+  let firstSubjectsKey: string | null = expectedSubjects && expectedSubjects.length > 0
+    ? expectedSubjects.map(s => s.trim()).sort().join("|")
+    : null;
 
   for (let i = 0; i < seats.length; i++) {
     if (signal?.aborted) break;
@@ -129,6 +158,16 @@ export async function fetchResultsBatch(
     const result = await fetchStudentResult(seat);
 
     if (result) {
+      const currentSubjectsKey = result.subjects
+        .map((s) => s.subjectName.trim())
+        .sort()
+        .join("|");
+
+      if (!firstSubjectsKey) {
+        firstSubjectsKey = currentSubjectsKey;
+      } else if (firstSubjectsKey !== currentSubjectsKey) {
+        throw new Error("Different subject detected. Maybe another department. Analysis aborted.");
+      }
       results.push(result);
     } else {
       failed.push(seat);

@@ -72,6 +72,8 @@ export interface StudentResult {
   totalCredit: number;
   remarks: string;
   finalStatus: "PASS" | "FAIL" | "ATKT" | "F.F." | string;
+  aggregateMarks?: string;
+  aggregatePercentage?: string;
 }
 
 export interface SubjectMark {
@@ -118,6 +120,8 @@ export interface FetchResultResponse {
     total_credit: number;
     remarks: string;
     final_status: string;
+    aggregateMarks?: string;
+    aggregatePercentage?: string;
   };
   error?: string;
 }

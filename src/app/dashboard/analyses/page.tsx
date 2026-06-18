@@ -173,9 +173,13 @@ export default function AnalysesPage() {
         setGenerating(false);
         setProgress({ current: 0, total: 0, status: "idle" });
       }, 1500);
-    } catch {
+    } catch (err: any) {
       setProgress((p) => ({ ...p, status: "error" }));
-      toast({ title: "Analysis failed", variant: "error" });
+      toast({
+        title: "Analysis failed",
+        description: err?.message || "An unknown error occurred",
+        variant: "error",
+      });
       setGenerating(false);
     }
   }, [user, selectedDept, selectedSem, startSeat, endSeat, departments]);

@@ -113,12 +113,30 @@ export function getSubjectFailures(students: import("@/types").StudentResult[]) 
 
   students.forEach((student) => {
     student.subjects.forEach((subject) => {
+      const faThVal = String(subject.faTh || "").trim();
+      const saThVal = String(subject.saTh || "").trim();
+      const hasNoTheoryMarks = (faThVal === "-" || faThVal === "—" || faThVal === "") &&
+                               (saThVal === "-" || saThVal === "—" || saThVal === "");
+      if (hasNoTheoryMarks) return;
+
       if (!subjectMap.has(subject.subjectName)) {
         subjectMap.set(subject.subjectName, { fail: 0, pass: 0 });
       }
       const entry = subjectMap.get(subject.subjectName)!;
-      const saTh = Number(subject.saTh) || 0;
-      if (saTh < 40 || saTh === 0) {
+
+      const isBlank = (v: string) => v === "-" || v === "—" || v === "";
+
+      const faTh = isBlank(faThVal) ? null : (isNaN(Number(subject.faTh)) ? null : Number(subject.faTh));
+      const saTh = isBlank(saThVal) ? null : (isNaN(Number(subject.saTh)) ? null : Number(subject.saTh));
+      const total = (faTh ?? 0) + (saTh ?? 0);
+
+      // Official MSBTE criteria — enforce component minimum only when that component exists.
+      // FA-TH min 12/30, SA-TH min 28/70, Total min 40/100 (total check applies only when both components exist)
+      const faThFailed  = faTh !== null && faTh < 12;
+      const saThFailed  = saTh !== null && saTh < 28;
+      const totalFailed = (faTh !== null && saTh !== null) && total < 40;
+
+      if (faThFailed || saThFailed || totalFailed) {
         entry.fail++;
       } else {
         entry.pass++;
@@ -145,12 +163,15 @@ export function getSubjectToppers(students: import("@/types").StudentResult[]) {
   students.forEach((student) => {
     if (!isPassed(student.finalStatus)) return; // only passed students
     student.subjects.forEach((subj) => {
+      const faThVal = String(subj.faTh || "").trim();
+      const saThVal = String(subj.saTh || "").trim();
+      const hasNoTheoryMarks = (faThVal === "-" || faThVal === "—" || faThVal === "") &&
+                               (saThVal === "-" || saThVal === "—" || saThVal === "");
+      if (hasNoTheoryMarks) return;
+
       const total =
         (Number(subj.faTh) || 0) +
-        (Number(subj.saTh) || 0) +
-        (Number(subj.faPr) || 0) +
-        (Number(subj.saPr) || 0) +
-        (Number(subj.sla) || 0);
+        (Number(subj.saTh) || 0);
 
       const existing = subjectBest[subj.subjectName];
       if (!existing || total > existing.total) {
@@ -159,10 +180,12 @@ export function getSubjectToppers(students: import("@/types").StudentResult[]) {
     });
   });
 
-  return Object.entries(subjectBest).map(([subjectName, { student, total }]) => ({
-    subjectName,
-    studentName: student.name,
-    seatNo: student.seatNo,
-    totalMarks: total,
-  }));
+  return Object.entries(subjectBest)
+    .map(([subjectName, { student, total }]) => ({
+      subjectName,
+      studentName: student.name,
+      seatNo: student.seatNo,
+      totalMarks: total,
+    }))
+    .sort((a, b) => b.totalMarks - a.totalMarks);
 }

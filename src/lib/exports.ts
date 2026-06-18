@@ -41,11 +41,13 @@ export async function exportToExcel(analysis: Analysis, options: ExportOptions) 
     right: thinBorder,
   };
 
+  const showAggregateCols = students.some((s) => String(s.remarks || "").toLowerCase().includes("6k"));
+
   // ── Title row ─────────────────────────────────────────────────────────────
   const titleRow = ws.addRow([
     `${analysis.departmentName} — Semester ${analysis.semesterNumber}  |  Generated: ${new Date().toLocaleString()}`,
   ]);
-  const totalCols = 2 + allSubjects.length * subCols.length + 5; // seatNo + name + subjects*6 + total + % + cr + remark + status
+  const totalCols = 2 + allSubjects.length * subCols.length + 5 + (showAggregateCols ? 2 : 0); // seatNo + name + subjects*6 + total + % + (aggMarks + aggPct) + cr + remark + status
   ws.mergeCells(1, 1, 1, totalCols);
   titleRow.height = 28;
   titleRow.font = { bold: true, size: 13, color: { argb: PRIMARY_FG } };
@@ -58,7 +60,11 @@ export async function exportToExcel(analysis: Analysis, options: ExportOptions) 
     headerRow1.push(subj);
     for (let i = 1; i < subCols.length; i++) headerRow1.push(""); // placeholders for merge
   });
-  headerRow1.push("Total", "%", "Cr", "Remarks", "Status");
+  headerRow1.push("Total", "%");
+  if (showAggregateCols) {
+    headerRow1.push("Agg. Marks", "Agg. %");
+  }
+  headerRow1.push("Cr", "Remarks", "Status");
 
   const h1 = ws.addRow(headerRow1);
   h1.height = 26;
@@ -84,7 +90,11 @@ export async function exportToExcel(analysis: Analysis, options: ExportOptions) 
   allSubjects.forEach(() => {
     subCols.forEach((col) => headerRow2.push(col));
   });
-  headerRow2.push("", "", "", "", "");
+  headerRow2.push("", ""); // Total, %
+  if (showAggregateCols) {
+    headerRow2.push("", ""); // Agg. Marks, Agg. %
+  }
+  headerRow2.push("", "", ""); // Cr, Remarks, Status
 
   const h2 = ws.addRow(headerRow2);
   h2.height = 20;
@@ -115,7 +125,15 @@ export async function exportToExcel(analysis: Analysis, options: ExportOptions) 
 
     row.push(
       isNaN(student.totalMarks) ? "—" : student.totalMarks,
-      isPassed(student.finalStatus) && !isNaN(student.percentage) ? `${student.percentage}%` : "—",
+      isPassed(student.finalStatus) && !isNaN(student.percentage) ? `${student.percentage}%` : "—"
+    );
+    if (showAggregateCols) {
+      row.push(
+        student.aggregateMarks || "—",
+        student.aggregatePercentage ? `${student.aggregatePercentage}%` : "—"
+      );
+    }
+    row.push(
       isNaN(student.totalCredit) ? "—" : student.totalCredit,
       student.remarks || "—",
       student.finalStatus
@@ -145,6 +163,13 @@ export async function exportToExcel(analysis: Analysis, options: ExportOptions) 
     // % column – bold primary blue
     const pctCol = 2 + allSubjects.length * subCols.length + 2;
     dataRow.getCell(pctCol).font = { size: 10, bold: true, color: { argb: "2563EB" } };
+
+    if (showAggregateCols) {
+      const aggMarksCol = pctCol + 1;
+      const aggPctCol = pctCol + 2;
+      dataRow.getCell(aggMarksCol).font = { size: 10, color: { argb: "D97706" } }; // Amber-600
+      dataRow.getCell(aggPctCol).font = { size: 10, bold: true, color: { argb: "D97706" } };
+    }
 
     // Status column – coloured badge
     const statusCol = totalCols;
@@ -181,9 +206,15 @@ export async function exportToExcel(analysis: Analysis, options: ExportOptions) 
   const trailingStart = 3 + allSubjects.length * subCols.length;
   ws.getColumn(trailingStart).width = 8;     // Total
   ws.getColumn(trailingStart + 1).width = 8; // %
-  ws.getColumn(trailingStart + 2).width = 6; // Cr
-  ws.getColumn(trailingStart + 3).width = 12; // Remarks
-  ws.getColumn(trailingStart + 4).width = 10; // Status
+  let currentIdx = trailingStart + 2;
+  if (showAggregateCols) {
+    ws.getColumn(currentIdx).width = 12; // Agg. Marks
+    ws.getColumn(currentIdx + 1).width = 10; // Agg. %
+    currentIdx += 2;
+  }
+  ws.getColumn(currentIdx).width = 6; // Cr
+  ws.getColumn(currentIdx + 1).width = 12; // Remarks
+  ws.getColumn(currentIdx + 2).width = 10; // Status
 
   // ── Download ──────────────────────────────────────────────────────────────
   const buffer = await workbook.xlsx.writeBuffer();
@@ -202,6 +233,7 @@ export function exportToCSV(analysis: Analysis, options: ExportOptions) {
   if (!students || students.length === 0) return;
 
   const allSubjects = getUniqueSubjects(students);
+  const showAggregateCols = students.some((s) => String(s.remarks || "").toLowerCase().includes("6k"));
 
   // Build headers
   const headers = ["Seat No", "Name"];
@@ -215,7 +247,11 @@ export function exportToCSV(analysis: Analysis, options: ExportOptions) {
       `${subj}[credits]`
     );
   });
-  headers.push("totalmarks", "percentage", "totalcredits", "remark", "final status");
+  headers.push("totalmarks", "percentage");
+  if (showAggregateCols) {
+    headers.push("aggregatemarks", "aggregatepercentage");
+  }
+  headers.push("totalcredits", "remark", "final status");
 
   // Build rows
   const rows = students.map((student) => {
@@ -233,7 +269,12 @@ export function exportToCSV(analysis: Analysis, options: ExportOptions) {
     });
     row.push(
       student.totalMarks,
-      isPassed(student.finalStatus) && !isNaN(student.percentage) ? student.percentage : "",
+      isPassed(student.finalStatus) && !isNaN(student.percentage) ? student.percentage : ""
+    );
+    if (showAggregateCols) {
+      row.push(student.aggregateMarks ?? "", student.aggregatePercentage ?? "");
+    }
+    row.push(
       student.totalCredit,
       student.remarks,
       student.finalStatus
