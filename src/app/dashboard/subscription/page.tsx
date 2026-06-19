@@ -38,12 +38,13 @@ const plans = [
   {
     id: "institute" as const,
     name: "Institute",
-    price: "₹1599",
-    period: "for 1 month",
+    price: "₹199",
+    originalPrice: "₹2999",
+    period: "month",
     icon: Building2,
     color: "text-green-600",
     bg: "bg-green-50 dark:bg-green-950/40",
-    description: "Full access for your entire institute",
+    description: "Launch Offer - Full access for your entire university/institute",
     popular: true,
     features: [
       "Unlimited batch analyses",
@@ -54,7 +55,7 @@ const plans = [
       "Subject-wise analysis",
       "Charts & statistics",
       "Unlimited departments",
-      "Institute logo on reports",
+      "Institute logo on all reports",
       "Branded PDF exports",
       "Bulk batch processing",
       "Priority email support",
@@ -111,8 +112,8 @@ export default function SubscriptionPage() {
 
     setProcessingPlan(selectedPlan);
     try {
-      const planPrices: Record<string, number> = { institute: 1599 };
-      const amount = planPrices[selectedPlan] || 1599;
+      const planPrices: Record<string, number> = { institute: 199 };
+      const amount = planPrices[selectedPlan] || 199;
 
       const res = await fetch('/api/payment/initiate', {
         method: 'POST',
@@ -148,11 +149,13 @@ export default function SubscriptionPage() {
             clearInterval(pollInterval);
             setPaymentIframeUrl(null);
             setPhoneDialogOpen(false);
+            setProcessingPlan(null);
             toast({ title: 'Payment Successful', variant: 'success' });
             setTimeout(() => window.location.reload(), 1500);
           } else if (verifyData.status === 'FAILED') {
             clearInterval(pollInterval);
             setPaymentIframeUrl(null);
+            setProcessingPlan(null);
             toast({ title: 'Payment Failed', variant: 'error' });
           }
         } catch (e) {
@@ -178,25 +181,32 @@ export default function SubscriptionPage() {
         </p>
       </div>
 
-      {/* Current plan banner */}
+      {/* Current plan banner - hide if expired */}
       {subscription && subscriptionPlan !== "free" && (
-        <Card className="border-primary bg-primary/5">
-          <CardContent className="p-5 flex items-center gap-4">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-xl gradient-bg flex items-center justify-center">
-                <Building2 className="h-5 w-5 text-white" />
-              </div>
-              <div>
-                <p className="font-semibold text-foreground">
-                  You&apos;re on the Institute plan
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  Active subscription · All premium features unlocked
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        (() => {
+          const expiry = new Date(subscription.startDate.getTime() + 30 * 24 * 60 * 60 * 1000);
+          const isExpired = expiry < new Date();
+          if (isExpired) return null;
+          return (
+            <Card className="border-primary bg-primary/5">
+              <CardContent className="p-5 flex items-center gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl gradient-bg flex items-center justify-center">
+                    <Building2 className="h-5 w-5 text-white" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-foreground">
+                      You’re on the Institute plan
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Active subscription · All premium features unlocked
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })()
       )}
 
       {/* Plans */}
@@ -224,11 +234,19 @@ export default function SubscriptionPage() {
                 <div className={`h-10 w-10 rounded-xl flex items-center justify-center mb-2 ${plan.bg}`}>
                   <Icon className={`h-5 w-5 ${plan.color}`} />
                 </div>
-                <CardTitle>{plan.name}</CardTitle>
+                <CardTitle className="flex items-center justify-between">
+                  <span>{plan.name}</span>
+                  {plan.id === "institute" && (
+                    <Badge variant="success" className="text-[10px] uppercase font-bold tracking-wider animate-pulse">Launch Offer</Badge>
+                  )}
+                </CardTitle>
                 <CardDescription>{plan.description}</CardDescription>
-                <div className="mt-2">
+                <div className="mt-2 flex items-baseline gap-2">
                   <span className="text-3xl font-bold text-foreground">{plan.price}</span>
-                  <span className="text-muted-foreground text-sm ml-1">/{plan.period}</span>
+                  {"originalPrice" in plan && plan.originalPrice && (
+                    <span className="text-sm text-muted-foreground line-through font-medium">{plan.originalPrice}</span>
+                  )}
+                  <span className="text-muted-foreground text-sm ml-0.5">/{plan.period}</span>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -305,7 +323,7 @@ export default function SubscriptionPage() {
             />
           </div>
           <div className="flex justify-end gap-3">
-            <Button variant="outline" onClick={() => setPhoneDialogOpen(false)}>
+            <Button variant="outline" onClick={() => { setProcessingPlan(null); setPhoneDialogOpen(false); }}>
               Cancel
             </Button>
             <Button onClick={handleProcessPayment} disabled={phoneNumber.length < 10}>

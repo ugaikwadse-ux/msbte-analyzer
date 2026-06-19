@@ -11,7 +11,7 @@ export async function POST(req: Request) {
     }
 
     // Server-side price enforcement — never trust client amount
-    const PLAN_PRICES: Record<string, number> = { institute: 1599 };
+    const PLAN_PRICES: Record<string, number> = { institute: 199 };
     const verifiedAmount = PLAN_PRICES[planId];
     if (!verifiedAmount) {
       return NextResponse.json({ error: 'Invalid plan' }, { status: 400 });

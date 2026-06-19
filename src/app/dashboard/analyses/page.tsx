@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   BarChart3, Plus, Clock, Users, TrendingUp, Trash2, ArrowRight,
-  Search, ChevronDown, Building2, BookOpen,
+  Search, ChevronDown, Building2, BookOpen, Crown,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { getAnalyses, getDepartments, deleteAnalysis, getUserProfile } from "@/lib/db";
@@ -20,7 +20,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { toast } from "@/components/ui/toaster";
 
 export default function AnalysesPage() {
-  const { user, subscriptionPlan } = useAuth();
+  const { user, subscriptionPlan, isPremium } = useAuth();
   const searchParams = useSearchParams();
   const [analyses, setAnalyses] = useState<Analysis[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -230,6 +230,42 @@ export default function AnalysesPage() {
           Generate Analysis
         </Button>
       </div>
+
+      {/* Special Launch Offer Promo Banner */}
+      {!isPremium && (
+        <Card className="relative overflow-hidden border-primary/30 bg-gradient-to-r from-primary/10 via-primary/5 to-background shadow-md">
+          {/* Decorative glowing background elements */}
+          <div className="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-primary/20 rounded-full blur-2xl pointer-events-none" />
+          <div className="absolute bottom-0 left-0 -mb-4 -ml-4 w-24 h-24 bg-green-500/10 rounded-full blur-2xl pointer-events-none" />
+          
+          <CardContent className="p-5 flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="flex items-start gap-4">
+              <div className="h-12 w-12 rounded-2xl bg-primary/20 flex items-center justify-center flex-shrink-0 border border-primary/30 shadow-inner animate-pulse">
+                <Crown className="h-6 w-6 text-primary" />
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm font-bold text-primary uppercase tracking-wider">Special Launch Offer</span>
+                  <Badge variant="destructive" className="text-[10px] px-2 py-0.5 animate-bounce">Expiring Soon</Badge>
+                </div>
+                <h3 className="text-lg font-bold text-foreground flex flex-wrap items-baseline gap-2">
+                  Upgrade to Institute Plan for just <span className="text-primary font-extrabold text-xl">₹199</span>/month
+                  <span className="text-sm text-muted-foreground line-through font-normal">₹2999/month</span>
+                </h3>
+                <p className="text-sm text-muted-foreground max-w-2xl">
+                  Unlock unlimited batch analyses, unlimited departments, PDF/CSV downloads without watermark, custom branding, topper lists, and complete analytics for the whole university!
+                </p>
+              </div>
+            </div>
+            <Link href="/dashboard/subscription" className="w-full md:w-auto flex-shrink-0">
+              <Button size="lg" className="w-full md:w-auto gap-2 bg-gradient-to-r from-primary to-primary/95 hover:from-primary/95 hover:to-primary shadow-lg hover:shadow-primary/25 transition-all duration-300 transform hover:-translate-y-0.5">
+                Upgrade Now
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Search */}
       {analyses.length > 0 && (

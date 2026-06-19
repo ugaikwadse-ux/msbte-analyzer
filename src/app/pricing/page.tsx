@@ -36,12 +36,13 @@ const plans = [
   {
     id: "institute",
     name: "Institute",
-    price: "₹1599",
-    period: "for 1 month",
+    price: "₹199",
+    originalPrice: "₹2999",
+    period: "month",
     icon: Building2,
     color: "text-green-600",
     bg: "bg-green-50 dark:bg-green-950/40",
-    description: "Complete solution for institutes",
+    description: "Launch Offer - Complete solution for institutes/universities",
     popular: true,
     features: [
       "Unlimited departments",
@@ -122,11 +123,19 @@ export default function PricingPage() {
                     <div className={`h-10 w-10 rounded-xl flex items-center justify-center mb-3 ${plan.bg}`}>
                       <Icon className={`h-5 w-5 ${plan.color}`} />
                     </div>
-                    <CardTitle>{plan.name}</CardTitle>
+                    <CardTitle className="flex items-center justify-between">
+                      <span>{plan.name}</span>
+                      {plan.id === "institute" && (
+                        <Badge variant="success" className="text-[10px] uppercase font-bold tracking-wider animate-pulse">Launch Offer</Badge>
+                      )}
+                    </CardTitle>
                     <CardDescription>{plan.description}</CardDescription>
-                    <div className="mt-3">
+                    <div className="mt-3 flex items-baseline gap-2">
                       <span className="text-4xl font-bold text-foreground">{plan.price}</span>
-                      <span className="text-muted-foreground ml-1 text-sm">/{plan.period}</span>
+                      {"originalPrice" in plan && plan.originalPrice && (
+                        <span className="text-base text-muted-foreground line-through font-medium">{plan.originalPrice}</span>
+                      )}
+                      <span className="text-muted-foreground text-sm ml-0.5">/{plan.period}</span>
                     </div>
                   </CardHeader>
                   <CardContent className="flex-1 flex flex-col justify-between gap-6">
