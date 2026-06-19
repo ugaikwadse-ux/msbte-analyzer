@@ -55,6 +55,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return;
         }
 
+        // Complimentary accounts – free institute access until expiry date
+        const COMPLIMENTARY_ACCOUNTS: Record<string, string> = {
+          "siddharthjath@gmail.com": "2026-07-19", // 1 month free – granted 2026-06-19
+        };
+        const email = firebaseUser.email || "";
+        if (email in COMPLIMENTARY_ACCOUNTS) {
+          const expiry = new Date(COMPLIMENTARY_ACCOUNTS[email]);
+          if (new Date() < expiry) {
+            setSubscriptionPlan("institute");
+            setUser({ ...firebaseUser, subscriptionPlan: "institute" });
+            setLoading(false);
+            return;
+          }
+        }
+
         try {
           const profile = await getUserProfile(firebaseUser.uid);
           const plan = (profile?.subscription as SubscriptionPlan) || "free";
